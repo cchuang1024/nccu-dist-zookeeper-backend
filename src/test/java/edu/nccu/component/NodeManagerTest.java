@@ -3,6 +3,8 @@ package edu.nccu.component;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import edu.nccu.domain.AppState;
+import edu.nccu.domain.ApplicationState;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +22,9 @@ public class NodeManagerTest {
 
     @Autowired
     private ApplicationContext context;
+
+    @Autowired
+    private ApplicationState appState;
 
     @Autowired
     @Qualifier("taskExecutor")
@@ -41,25 +46,43 @@ public class NodeManagerTest {
     public void testLoadContext() {
         assertThat(context).isNotNull();
         assertThat(taskExecutor).isNotNull();
+        assertThat(appState).isNotNull();
 
         NodeManager nodeManager = context.getBean(NodeManager.class);
         assertThat(nodeManager).isNotNull();
+
+        assertThat(appState.getState()).isEqualTo(AppState.INIT);
     }
 
     @Test
     public void testRunTwoManager() throws InterruptedException {
         NodeManager nodeManager1 = context.getBean(NodeManager.class);
         nodeManager1.setHostId(UUID.randomUUID().toString());
+        nodeManager1.setAppState(AppState.INIT);
         taskExecutor.execute(nodeManager1);
         TimeUnit.SECONDS.sleep(3L);
 
         NodeManager nodeManager2 = context.getBean(NodeManager.class);
         nodeManager2.setHostId(UUID.randomUUID().toString());
+        nodeManager2.setAppState(AppState.INIT);
         taskExecutor.execute(nodeManager2);
         TimeUnit.SECONDS.sleep(3L);
 
-        nodeManager1.destroy();
-        TimeUnit.SECONDS.sleep(9L);
+        nodeManager1.setAppState(AppState.DESTROY);
+        TimeUnit.SECONDS.sleep(20L);
 
+        nodeManager2.setAppState(AppState.DESTROY);
+        TimeUnit.SECONDS.sleep(10L);
+
+    }
+
+    @Test
+    public void testRunOneManager() throws InterruptedException {
+        NodeManager nodeManager1 = context.getBean(NodeManager.class);
+        nodeManager1.setHostId(UUID.randomUUID().toString());
+        nodeManager1.setAppState(AppState.INIT);
+        taskExecutor.execute(nodeManager1);
+
+        TimeUnit.SECONDS.sleep(20L);
     }
 }
