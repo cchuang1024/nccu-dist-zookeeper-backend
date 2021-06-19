@@ -76,6 +76,11 @@ public class ZookeeperService {
         }
     }
 
+    public void cleanHost() {
+        zkClient.delete(PATH_ID);
+        zkClient.delete(PATH_HOST);
+    }
+
     public boolean isHostExists() {
         return zkClient.exists(PATH_HOST);
     }
