@@ -3,9 +3,8 @@ package edu.nccu.component;
 import java.util.concurrent.TimeUnit;
 
 import edu.nccu.domain.AppState;
+import edu.nccu.service.ZookeeperService;
 import lombok.extern.slf4j.Slf4j;
-import org.I0Itec.zkclient.ZkClient;
-import org.I0Itec.zkclient.ZkConnection;
 import org.I0Itec.zkclient.exception.ZkNoNodeException;
 import org.I0Itec.zkclient.exception.ZkNodeExistsException;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -14,6 +13,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
+import static edu.nccu.config.Constant.PATH_HOST;
+import static edu.nccu.config.Constant.PATH_ID;
 import static org.springframework.beans.factory.config.BeanDefinition.SCOPE_PROTOTYPE;
 
 @Component
@@ -21,25 +22,20 @@ import static org.springframework.beans.factory.config.BeanDefinition.SCOPE_PROT
 @Slf4j
 public class NodeManager implements Runnable {
 
-    private static final String PATH_HOST = "/zkApp/host";
-    private static final String PATH_ID = "/zkApp/id";
-
     @Value("${media.server.host}")
     private String mediaHost;
-
-    @Value("${zookeeper.connectString}")
-    private String connectString;
 
     @Value("${media.server.recreateTimeSec}")
     private long recreateTime;
 
     private AppState appState;
     private String hostId;
-    private ZkClient zkClient;
+    private ZookeeperService zkService;
 
     @Autowired
-    public NodeManager() {
+    public NodeManager(ZookeeperService zkService) {
         this.appState = AppState.INIT;
+        this.zkService = zkService;
     }
 
     public String getHostId() {
@@ -60,13 +56,6 @@ public class NodeManager implements Runnable {
 
     @Override
     public void run() {
-        ZkConnection zkConn = new ZkConnection(connectString);
-        this.zkClient = new ZkClient(zkConn);
-
-        main();
-    }
-
-    private void main() {
         try {
             while (true) {
                 switch (appState) {
@@ -89,22 +78,22 @@ public class NodeManager implements Runnable {
     }
 
     private void checkNode() {
-        if (!zkClient.exists(PATH_HOST)) {
+        if (!zkService.isHostExists()) {
             appState = AppState.INIT;
-            main();
+            run();
         }
 
-        log.info("get node value {}", zkClient.readData(PATH_ID).toString());
+        log.info("get node value {}", zkService.readId());
     }
 
     private synchronized void createNode() {
         try {
             log.info("creating node at {}", Thread.currentThread().getName());
 
-            zkClient.createEphemeral(PATH_HOST, mediaHost);
+            zkService.createHostNode(mediaHost);
             log.info("ephemeral node {} created with {} at {}", PATH_HOST, mediaHost, Thread.currentThread().getName());
 
-            zkClient.createEphemeral(PATH_ID, hostId);
+            zkService.createIdNode(hostId);
             log.info("ephemeral node {} created with {} at {}", PATH_ID, hostId, Thread.currentThread().getName());
 
             appState = AppState.CONNECTED;
@@ -113,7 +102,7 @@ public class NodeManager implements Runnable {
             log.info(ExceptionUtils.getStackTrace(noNode));
 
             String parentDir = PATH_HOST.substring(0, PATH_HOST.lastIndexOf('/'));
-            zkClient.createPersistent(parentDir, true);
+            zkService.createParentNode(parentDir);
 
             createNode();
         } catch (ZkNodeExistsException nodeExist) {
@@ -124,9 +113,6 @@ public class NodeManager implements Runnable {
 
     public void destroy() {
         log.info("shutting down and destroying...");
-
-        this.zkClient.delete(PATH_ID);
-        this.zkClient.delete(PATH_HOST);
-        this.zkClient.close();
+        zkService.destroy();
     }
 }
