@@ -77,8 +77,16 @@ public class ZookeeperService {
     }
 
     public void cleanHost() {
-        zkClient.delete(PATH_ID);
-        zkClient.delete(PATH_HOST);
+        try{
+            mutex.acquire();
+
+            zkClient.delete(PATH_ID);
+            zkClient.delete(PATH_HOST);
+        } catch (InterruptedException e) {
+            log.error(ExceptionUtils.getStackTrace(e));
+        }finally {
+            mutex.release();
+        }
     }
 
     public boolean isHostExists() {
